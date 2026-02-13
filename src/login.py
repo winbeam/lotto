@@ -49,6 +49,34 @@ def save_session(context, path=SESSION_PATH):
     print(f"Session saved to {path}")
 
 
+def is_logged_in(page: Page) -> bool:
+    """
+    Check if the user is currently logged in.
+    This is a non-intrusive check.
+    """
+    try:
+        # If we are on a page that HAS a logout link, we are logged in
+        if page.get_by_text("로그아웃").first.is_visible(timeout=3000):
+            return True
+        
+        # If we are on the login page itself, we are likely NOT logged in
+        # (Unless it's a redirect, but usually the logout button check covers it)
+        if "/login" in page.url or "method=login" in page.url:
+             return False
+
+        # Try to navigate to a page that requires login and see if it redirects
+        # This is the most reliable check but slightly more "active"
+        # We only do this if we are not sure (e.g. on main page but buttons not visible yet)
+        if page.url == "about:blank" or "dhlottery.co.kr" not in page.url:
+            page.goto("https://www.dhlottery.co.kr/main.do", timeout=15000)
+            if page.get_by_text("로그아웃").first.is_visible(timeout=5000):
+                return True
+        
+        return False
+    except Exception:
+        return False
+
+
 def login(page: Page) -> None:
     """
     동행복권 사이트에 로그인합니다.
@@ -57,22 +85,16 @@ def login(page: Page) -> None:
     if not USER_ID or not PASSWD:
         raise ValueError("USER_ID or PASSWD not found in environment variables.")
     
-    # 0. Setup alert handler to automatically accept any alerts (like session timeout alerts)
+    # Setup alert handler to automatically accept any alerts
     page.on("dialog", lambda dialog: dialog.accept())
+
+    # 1. Quick check if already logged in
+    if is_logged_in(page):
+        print("Already logged in. Skipping login process.")
+        return
 
     print('Starting login process...')
     
-    # 1. Check if already logged in by looking for "로그아웃" link
-    # We do a quick check on the main page first
-    try:
-        print("Checking session on main page...")
-        page.goto("https://www.dhlottery.co.kr/main.do", timeout=15000)
-        if page.get_by_text("로그아웃").first.is_visible(timeout=5000):
-            print("Already logged in (detected logout button)")
-            return
-    except Exception:
-        pass # Continue to explicit login if check fails
-
     # 2. Go to login page
     print("Navigating to login page...")
     page.goto("https://www.dhlottery.co.kr/login", timeout=30000, wait_until="domcontentloaded")
@@ -85,28 +107,19 @@ def login(page: Page) -> None:
 
     # 4. Fill login form
     try:
-        # The selector might be #inpUserId
         print("Checking login form...")
         # If we are not on login page, we might be already logged in
         if "/login" not in page.url and "method=login" not in page.url:
-             if page.locator(".btn_logout").is_visible(timeout=2000) or page.get_by_text("로그아웃").first.is_visible(timeout=2000):
+             if page.get_by_text("로그아웃").first.is_visible(timeout=2000):
                  print("Already logged in (detected via URL and logout button)")
                  return
 
         page.wait_for_selector("#inpUserId", timeout=10000)
         
-        # Check if already filled (autofill)
-        existing_id = page.locator("#inpUserId").input_value()
-        if existing_id == USER_ID:
-            print(f"ID '{USER_ID}' is already filled.")
-        else:
-            page.locator("#inpUserId").fill(USER_ID)
-            
-        existing_pw = page.locator("#inpUserPswdEncn").input_value()
-        if existing_pw:
-            print("Password is already filled.")
-        else:
-            page.locator("#inpUserPswdEncn").fill(PASSWD)
+        # Fill ID
+        page.locator("#inpUserId").fill(USER_ID)
+        # Fill Password
+        page.locator("#inpUserPswdEncn").fill(PASSWD)
         
         # Click login button
         print("Clicking login button...")
@@ -135,8 +148,8 @@ def login(page: Page) -> None:
                  raise Exception(f"Login failed: Still on login page ({page.url})")
             print(f"Assuming login might have worked (URL: {page.url})")
 
-    # Give a bit more time for session cookies to be stable across subdomains
-    time.sleep(3)
+    # Give a bit more time for session cookies to be stable
+    time.sleep(2)
 
 
 def main():

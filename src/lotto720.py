@@ -34,9 +34,13 @@ def run(playwright: Playwright, sr: ScriptReporter) -> None:
     # Setup alert handler to automatically accept any alerts
     page.on("dialog", lambda dialog: dialog.accept())
 
-    # Perform login using injected page
-    sr.stage("LOGIN")
-    login(page)
+    # Perform login only if needed
+    from login import is_logged_in
+    if not is_logged_in(page):
+        sr.stage("LOGIN")
+        login(page)
+    else:
+        print("Already logged in. Skipping login stage.")
     
     sr.stage("NAVIGATE")
 

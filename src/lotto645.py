@@ -122,10 +122,14 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, sr: Scrip
     # 0. Setup alert handler to automatically accept any alerts (like session timeout alerts)
     page.on("dialog", lambda dialog: dialog.accept())
 
-    # Perform login
+    # Perform login only if needed
+    from login import is_logged_in
     try:
-        sr.stage("LOGIN")
-        login(page)
+        if not is_logged_in(page):
+            sr.stage("LOGIN")
+            login(page)
+        else:
+            print("Already logged in. Skipping login stage.")
 
         # Navigate to the Wrapper Page (TotalGame.jsp) which handles session sync correctly
         sr.stage("NAVIGATE")

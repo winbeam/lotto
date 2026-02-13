@@ -80,9 +80,13 @@ def run(playwright: Playwright, sr: ScriptReporter) -> dict:
     page = context.new_page()
     
     try:
-        # Perform login
-        sr.stage("LOGIN")
-        login(page)
+        # Perform login only if needed
+        from login import is_logged_in
+        if not is_logged_in(page):
+            sr.stage("LOGIN")
+            login(page)
+        else:
+            print("Already logged in. Skipping login stage.")
         
         # Get balance information
         sr.stage("GET_BALANCE")

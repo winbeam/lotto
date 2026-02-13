@@ -222,8 +222,12 @@ def run(playwright: Playwright, amount: int, sr: ScriptReporter):
     page = context.new_page()
     
     try:
-        sr.stage("LOGIN")
-        login(page)
+        from login import is_logged_in
+        if not is_logged_in(page):
+            sr.stage("LOGIN")
+            login(page)
+        else:
+            print("Already logged in. Skipping login stage.")
         sr.stage("CHARGE")
         success = charge_deposit(page, amount)
         if success:
