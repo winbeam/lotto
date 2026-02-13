@@ -32,6 +32,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Step 0: Login and Save Session (Initial once)
+echo "Logging in and saving session..."
+"$VENV_PYTHON" "$PROJECT_DIR/src/login.py"
+
 # Step 1: Check balance
 echo "Checking balance..."
 BALANCE_OUTPUT=$("$VENV_PYTHON" "$PROJECT_DIR/src/balance.py" 2>&1)

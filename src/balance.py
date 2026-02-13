@@ -3,11 +3,11 @@ import re
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import Playwright, sync_playwright, Page
-from login import login
+from login import login, SESSION_PATH
 
 import sys
 import traceback
-from reporter import Reporter
+from script_reporter import ScriptReporter
 
 # .env loading is handled by login module import
 
@@ -69,20 +69,23 @@ def get_balance(page: Page) -> dict:
     }
 
 
-def run(playwright: Playwright, reporter: Reporter) -> dict:
+def run(playwright: Playwright, sr: ScriptReporter) -> dict:
     """로그인 후 잔액 정보를 조회합니다."""
     # Create browser, context, and page
     browser = playwright.chromium.launch(headless=True)
-    context = browser.new_context()
+
+    # Load session if exists
+    storage_state = SESSION_PATH if Path(SESSION_PATH).exists() else None
+    context = browser.new_context(storage_state=storage_state)
     page = context.new_page()
     
     try:
         # Perform login
-        reporter.stage("LOGIN")
+        sr.stage("LOGIN")
         login(page)
         
         # Get balance information
-        reporter.stage("GET_BALANCE")
+        sr.stage("GET_BALANCE")
         balance_info = get_balance(page)
         
         # Print results in a clean format
@@ -101,11 +104,11 @@ def run(playwright: Playwright, reporter: Reporter) -> dict:
 
 
 if __name__ == "__main__":
-    rep = Reporter("Balance Check")
+    sr = ScriptReporter("Balance Check")
     try:
         with sync_playwright() as playwright:
-            balance_info = run(playwright, rep)
-            rep.success(balance_info)
+            balance_info = run(playwright, sr)
+            sr.success(balance_info)
     except Exception as e:
-        rep.fail(traceback.format_exc())
+        sr.fail(traceback.format_exc())
         sys.exit(1)

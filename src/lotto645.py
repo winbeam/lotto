@@ -10,12 +10,12 @@ from os import environ
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import Playwright, sync_playwright
-from login import login
+from login import login, SESSION_PATH
 
 # .env loading is handled by login module import
 
 
-from reporter import Reporter
+from script_reporter import ScriptReporter
 
 
 def parse_arguments():
@@ -98,7 +98,7 @@ def parse_arguments():
         sys.exit(1)
 
 
-def run(playwright: Playwright, auto_games: int, manual_numbers: list, reporter: Reporter) -> dict:
+def run(playwright: Playwright, auto_games: int, manual_numbers: list, sr: ScriptReporter) -> dict:
     """
     로또 6/45를 자동 및 수동으로 구매합니다.
     
@@ -106,14 +106,17 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, reporter:
         playwright: Playwright 객체
         auto_games: 자동 구매 게임 수
         manual_numbers: 수동 구매 번호 리스트
-        reporter: Reporter 객체
+        sr: ScriptReporter 객체
     
     Returns:
         dict: 처리 결과 세부 정보 (processed_count 등)
     """
     # Create browser, context, and page
     browser = playwright.chromium.launch(headless=True)
-    context = browser.new_context()
+
+    # Load session if exists
+    storage_state = SESSION_PATH if Path(SESSION_PATH).exists() else None
+    context = browser.new_context(storage_state=storage_state)
     page = context.new_page()
     
     # 0. Setup alert handler to automatically accept any alerts (like session timeout alerts)
@@ -121,11 +124,11 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, reporter:
 
     # Perform login
     try:
-        reporter.stage("LOGIN")
+        sr.stage("LOGIN")
         login(page)
 
         # Navigate to the Wrapper Page (TotalGame.jsp) which handles session sync correctly
-        reporter.stage("NAVIGATE")
+        sr.stage("NAVIGATE")
         print("Navigating to Lotto 6/45 Wrapper page...")
         game_url = "https://el.dhlottery.co.kr/game/TotalGame.jsp?LottoId=LO40"
         page.goto(game_url, timeout=30000)
@@ -134,12 +137,12 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, reporter:
         time.sleep(1) 
         if "/login" in page.url or "method=login" in page.url:
             print("Redirection detected. Attempting to log in again...")
-            reporter.stage("RELOGIN")
+            sr.stage("RELOGIN")
             login(page)
             page.goto(game_url, timeout=30000)
 
         # Access the game iframe
-        reporter.stage("IFRAME_LOAD")
+        sr.stage("IFRAME_LOAD")
         print("Waiting for game iframe to load...")
         try:
             page.wait_for_selector("#ifrm_tab", state="visible", timeout=20000)
@@ -172,7 +175,7 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, reporter:
                 print("Session not found in frame. Re-verifying...")
                 # Some versions might hide logout button instead
                 if not frame.get_by_text("로그아웃").first.is_visible(timeout=5000):
-                    reporter.stage("RELOGIN_FRAME")
+                    sr.stage("RELOGIN_FRAME")
                     login(page)
                     page.goto(game_url, timeout=30000)
             else:
@@ -198,7 +201,7 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, reporter:
         """)
 
         # Manual numbers
-        reporter.stage("SELECT_NUMBERS")
+        sr.stage("SELECT_NUMBERS")
         if manual_numbers and len(manual_numbers) > 0:
             for game in manual_numbers:
                 print(f"Adding manual game: {game}")
@@ -230,7 +233,7 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, reporter:
             raise Exception(f"Payment mismatch (Expected {expected_amount}, Displayed {payment_amount})")
         
         # Purchase
-        reporter.stage("PURCHASE")
+        sr.stage("PURCHASE")
         frame.locator("#btnBuy").click()
         
         # Confirm purchase popup (Inside Frame)
@@ -239,7 +242,7 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, reporter:
         
         # Check for purchase limit alert or recommendation popup AFTER confirmation
         time.sleep(3)
-        reporter.stage("CHECK_RESULT")
+        sr.stage("CHECK_RESULT")
         
         # 1. Check for specific limit exceeded recommendation popup
         limit_popup = frame.locator("#recommend720Plus")
@@ -259,16 +262,16 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, reporter:
 
 
 if __name__ == "__main__":
-    rep = Reporter("Lotto 6/45")
+    sr = ScriptReporter("Lotto 6/45")
     
     try:
         # Parse command-line arguments or use .env configuration
         auto_games, manual_numbers = parse_arguments()
         
         with sync_playwright() as playwright:
-            process_result = run(playwright, auto_games, manual_numbers, rep)
-            rep.success(process_result)
+            process_result = run(playwright, auto_games, manual_numbers, sr)
+            sr.success(process_result)
             
     except Exception as e:
-        rep.fail(traceback.format_exc())
+        sr.fail(traceback.format_exc())
         sys.exit(1)

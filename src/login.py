@@ -5,6 +5,9 @@ from os import environ
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import Page, Playwright
+import sys
+import traceback
+from script_reporter import ScriptReporter
 
 # Robustly match .env file
 def load_environment():
@@ -35,6 +38,15 @@ load_environment()
 
 USER_ID = environ.get('USER_ID')
 PASSWD = environ.get('PASSWD')
+
+SESSION_PATH = "/tmp/dhlotto_session.json"
+
+def save_session(context, path=SESSION_PATH):
+    """
+    Saves the current browser context state (cookies, local storage) to a file.
+    """
+    context.storage_state(path=path)
+    print(f"Session saved to {path}")
 
 
 def login(page: Page) -> None:
@@ -125,4 +137,37 @@ def login(page: Page) -> None:
 
     # Give a bit more time for session cookies to be stable across subdomains
     time.sleep(3)
+
+
+def main():
+    """
+    Standalone login script that saves the session for other scripts to use.
+    """
+    from playwright.sync_api import sync_playwright
+    sr = ScriptReporter("Login Session")
+    
+    with sync_playwright() as playwright:
+        try:
+            print("Launching browser for initial login...")
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context()
+            page = context.new_page()
+            
+            sr.stage("LOGIN")
+            login(page)
+            
+            sr.stage("SAVE_SESSION")
+            save_session(context)
+            
+            print("Login successful and session persisted.")
+            sr.success({"session_path": SESSION_PATH})
+            
+            context.close()
+            browser.close()
+        except Exception:
+            sr.fail(traceback.format_exc())
+            sys.exit(1)
+
+if __name__ == "__main__":
+    main()
 

@@ -6,16 +6,16 @@ from os import environ
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import Playwright, sync_playwright
-from login import login
+from login import login, SESSION_PATH
 
 import sys
 import traceback
-from reporter import Reporter
+from script_reporter import ScriptReporter
 
 # .env loading is handled by login module import
 
 
-def run(playwright: Playwright, reporter: Reporter) -> None:
+def run(playwright: Playwright, sr: ScriptReporter) -> None:
     """
     연금복권 720+를 구매합니다.
     '모든 조'를 선택하여 임의의 번호로 5매(5,000원)를 구매합니다.
@@ -25,17 +25,20 @@ def run(playwright: Playwright, reporter: Reporter) -> None:
     """
     # Create browser, context, and page
     browser = playwright.chromium.launch(headless=True)
-    context = browser.new_context()
+    
+    # Load session if exists
+    storage_state = SESSION_PATH if Path(SESSION_PATH).exists() else None
+    context = browser.new_context(storage_state=storage_state)
     page = context.new_page()
     
     # Setup alert handler to automatically accept any alerts
     page.on("dialog", lambda dialog: dialog.accept())
 
     # Perform login using injected page
-    reporter.stage("LOGIN")
+    sr.stage("LOGIN")
     login(page)
     
-    reporter.stage("NAVIGATE")
+    sr.stage("NAVIGATE")
 
     try:
         # Navigate to the Wrapper Page (TotalGame.jsp) which handles session sync correctly
@@ -142,7 +145,7 @@ def run(playwright: Playwright, reporter: Reporter) -> None:
         """)
 
         # [자동번호] 클릭 - use force to bypass any remaining intercepting elements
-        reporter.stage("PURCHASE")
+        sr.stage("PURCHASE")
         frame.locator(".lotto720_btn_auto_number").click(force=True)
         
         time.sleep(2)
@@ -186,11 +189,11 @@ def run(playwright: Playwright, reporter: Reporter) -> None:
         browser.close()
 
 if __name__ == "__main__":
-    rep = Reporter("Lotto 720")
+    sr = ScriptReporter("Lotto 720")
     try:
         with sync_playwright() as playwright:
-            run(playwright, rep)
-            rep.success({"processed_count": 5}) # Fixed at 5 games as per script logic
+            run(playwright, sr)
+            sr.success({"processed_count": 5}) # Fixed at 5 games as per script logic
     except Exception:
-        rep.fail(traceback.format_exc())
+        sr.fail(traceback.format_exc())
         sys.exit(1)

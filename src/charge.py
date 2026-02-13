@@ -6,10 +6,10 @@ import time
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import Playwright, sync_playwright, Page
-from login import login
+from login import login, SESSION_PATH
 
 import traceback
-from reporter import Reporter
+from script_reporter import ScriptReporter
 
 # .env loading is handled by login module import
 
@@ -214,15 +214,17 @@ def charge_deposit(page: Page, amount: int) -> bool:
     page.wait_for_load_state("networkidle")
     return True
 
-def run(playwright: Playwright, amount: int, reporter: Reporter):
+def run(playwright: Playwright, amount: int, sr: ScriptReporter):
     browser = playwright.chromium.launch(headless=True)
-    context = browser.new_context()
+    # Load session if exists
+    storage_state = SESSION_PATH if Path(SESSION_PATH).exists() else None
+    context = browser.new_context(storage_state=storage_state)
     page = context.new_page()
     
     try:
-        reporter.stage("LOGIN")
+        sr.stage("LOGIN")
         login(page)
-        reporter.stage("CHARGE")
+        sr.stage("CHARGE")
         success = charge_deposit(page, amount)
         if success:
             print("Charge completed successfully!")
@@ -242,11 +244,11 @@ if __name__ == "__main__":
         except ValueError:
             pass
             
-    rep = Reporter("Balance Charge")
+    sr = ScriptReporter("Balance Charge")
     with sync_playwright() as playwright:
         try:
-            run(playwright, amount, rep)
-            rep.success({"amount": amount})
+            run(playwright, amount, sr)
+            sr.success({"amount": amount})
         except Exception:
-            rep.fail(traceback.format_exc())
+            sr.fail(traceback.format_exc())
             sys.exit(1)

@@ -51,9 +51,20 @@ echo "Installing Playwright browsers..."
 
 # Install system dependencies on Linux (requires sudo)
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    echo "Linux detected: Installing system dependencies for headless browser..."
-    echo "Sudo password may be required."
-    sudo "$VENV_DIR/bin/playwright" install-deps chromium
+    if command -v pacman &> /dev/null; then
+        echo "Arch Linux (or derivative) detected. Installing system dependencies for headless browser..."
+        echo "Sudo password may be required."
+        # These are common dependencies for Chromium on Arch Linux
+        sudo pacman -S --needed --noconfirm \
+            nss nspr atk at-spi2-atk at-spi2-core cups libdrm \
+            libxkbcommon libxcomposite libxdamage libxext \
+            libxfixes libxrandr mesa alsa-lib pango cairo \
+            gdk-pixbuf2 gtk3 libxshmfence
+    else
+        echo "Linux detected: Installing system dependencies for headless browser..."
+        echo "Sudo password may be required."
+        sudo "$VENV_DIR/bin/playwright" install-deps chromium || echo "Warning: playwright install-deps failed. Continuing anyway..."
+    fi
 fi
 
 echo "Playwright Chromium browser installed"
