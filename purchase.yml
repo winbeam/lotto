@@ -1,0 +1,5 @@
+# Schedule Trigger Activation
+
+# The schedule is triggered every Wednesday at 8 PM KST (UTC 11:00)
+schedule:
+  - cron: '0 11 * * 3'
