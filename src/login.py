@@ -43,6 +43,11 @@ PASSWD = environ.get('PASSWD')
 SESSION_PATH = "/tmp/dhlotto_session.json"
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 DEFAULT_VIEWPORT = {"width": 1920, "height": 1080}
+DEFAULT_HEADERS = {
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Sec-CH-UA-Mobile": "?0",
+    "Sec-CH-UA-Platform": '"Windows"'
+}
 
 def save_session(context, path=SESSION_PATH):
     """
@@ -75,6 +80,11 @@ def is_logged_in(page: Page) -> bool:
     This is a non-intrusive check.
     """
     try:
+        # If we are on mobile site, we consider ourselves "not logged in (for desktop requirements)"
+        # to trigger the login() flow which handles mobile-to-desktop transition
+        if "m.dhlottery.co.kr" in page.url:
+            return False
+
         if check_logged_in_elements(page, timeout=2000):
             return True
         
@@ -104,7 +114,7 @@ def login(page: Page) -> None:
     # Setup alert handler to automatically accept any alerts
     page.on("dialog", lambda dialog: dialog.accept())
 
-    # 1. Quick check if already logged in
+    # 1. Quick check if already logged in (now returns False on mobile site)
     if is_logged_in(page):
         print("Already logged in. Skipping login process.")
         return
@@ -113,19 +123,27 @@ def login(page: Page) -> None:
     
     # 2. Go to login page
     print("Navigating to login page...")
-    page.goto("https://www.dhlottery.co.kr/login", timeout=30000, wait_until="domcontentloaded")
+    # Add a cache-busting or view-forcing query param if applicable
+    page.goto("https://www.dhlottery.co.kr/login", timeout=10000, wait_until="domcontentloaded")
     
-    # Check for mobile redirection
+    # Check for persistent mobile redirection
     if "m.dhlottery.co.kr" in page.url:
-        print(f"Warning: Redirected to mobile site: {page.url}")
-        # On mobile, the login form might have different IDs
-        # Try to find common mobile login elements if desktop one fails
+        print(f"Warning: Still redirected to mobile site: {page.url}")
+        # Try one more time with a direct link to desktop main after clearing cookies if needed
+        # But let's try to just use mobile selectors as a fallback if it's really stuck
     
     # 3. Check if we were redirected away from login (means already logged in)
     if "/login" not in page.url and "method=login" not in page.url:
         if check_logged_in_elements(page, timeout=5000):
-            print("Already logged in (redirected from login page)")
-            return
+            # If we are on desktop and logged in, we are good
+            if "m.dhlottery.co.kr" not in page.url:
+                print("Already logged in (redirected from login page)")
+                return
+            else:
+                print("Logged in on mobile site. Attempting to switch to desktop...")
+                page.goto("https://www.dhlottery.co.kr/common.do?method=main", timeout=10000)
+                if "m.dhlottery.co.kr" not in page.url:
+                    return
 
     # 4. Fill login form
     try:
@@ -217,7 +235,8 @@ def main():
             browser = playwright.chromium.launch(headless=True)
             context = browser.new_context(
                 user_agent=DEFAULT_USER_AGENT,
-                viewport=DEFAULT_VIEWPORT
+                viewport=DEFAULT_VIEWPORT,
+                extra_http_headers=DEFAULT_HEADERS
             )
             page = context.new_page()
             

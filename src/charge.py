@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import Playwright, sync_playwright, Page
-from login import login, SESSION_PATH, DEFAULT_USER_AGENT, DEFAULT_VIEWPORT
+from login import login, SESSION_PATH, DEFAULT_USER_AGENT, DEFAULT_VIEWPORT, DEFAULT_HEADERS
 
 import traceback
 from script_reporter import ScriptReporter
@@ -167,7 +167,7 @@ def charge_deposit(page: Page, amount: int) -> bool:
         return False
 
     print(f"Navigating to charge page for {amount:,} won...")
-    page.goto("https://www.dhlottery.co.kr/mypage/mndpChrg", timeout=30000, wait_until="domcontentloaded")
+    page.goto("https://www.dhlottery.co.kr/mypage/mndpChrg", timeout=5000, wait_until="domcontentloaded")
     
     # 간편충전 선택
     page.click("text=간편충전")
@@ -221,7 +221,8 @@ def run(playwright: Playwright, amount: int, sr: ScriptReporter):
     context = browser.new_context(
         storage_state=storage_state,
         user_agent=DEFAULT_USER_AGENT,
-        viewport=DEFAULT_VIEWPORT
+        viewport=DEFAULT_VIEWPORT,
+        extra_http_headers=DEFAULT_HEADERS
     )
     page = context.new_page()
     

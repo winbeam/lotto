@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import Playwright, sync_playwright, Page
-from login import login, SESSION_PATH, DEFAULT_USER_AGENT, DEFAULT_VIEWPORT
+from login import login, SESSION_PATH, DEFAULT_USER_AGENT, DEFAULT_VIEWPORT, DEFAULT_HEADERS
 
 import sys
 import traceback
@@ -17,13 +17,13 @@ def get_balance(page: Page) -> dict:
     마이페이지에서 예치금 잔액과 구매가능 금액을 조회합니다.
     """
     print("Navigating to My Page...")
-    page.goto("https://www.dhlottery.co.kr/mypage/home", timeout=30000)
+    page.goto("https://www.dhlottery.co.kr/mypage/home", timeout=5000)
     
     # Check if redirected to login
     if "/login" in page.url:
         print("Redirection to login page detected. Attempting to log in again...")
         login(page)
-        page.goto("https://www.dhlottery.co.kr/mypage/home", timeout=30000)
+        page.goto("https://www.dhlottery.co.kr/mypage/home", timeout=5000)
     
     print("Waiting for balance elements...")
     # Try multiple possible selectors for the balance
@@ -79,7 +79,8 @@ def run(playwright: Playwright, sr: ScriptReporter) -> dict:
     context = browser.new_context(
         storage_state=storage_state,
         user_agent=DEFAULT_USER_AGENT,
-        viewport=DEFAULT_VIEWPORT
+        viewport=DEFAULT_VIEWPORT,
+        extra_http_headers=DEFAULT_HEADERS
     )
     page = context.new_page()
     

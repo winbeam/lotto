@@ -10,7 +10,7 @@ from os import environ
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import Playwright, sync_playwright
-from login import login, SESSION_PATH, DEFAULT_USER_AGENT, DEFAULT_VIEWPORT
+from login import login, SESSION_PATH, DEFAULT_USER_AGENT, DEFAULT_VIEWPORT, DEFAULT_HEADERS
 
 # .env loading is handled by login module import
 
@@ -119,7 +119,8 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, sr: Scrip
     context = browser.new_context(
         storage_state=storage_state, 
         user_agent=DEFAULT_USER_AGENT,
-        viewport=DEFAULT_VIEWPORT
+        viewport=DEFAULT_VIEWPORT,
+        extra_http_headers=DEFAULT_HEADERS
     )
     page = context.new_page()
     
@@ -139,7 +140,7 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, sr: Scrip
         sr.stage("NAVIGATE")
         print("Navigating to Lotto 6/45 Wrapper page...")
         game_url = "https://el.dhlottery.co.kr/game/TotalGame.jsp?LottoId=LO40"
-        page.goto(game_url, timeout=30000)
+        page.goto(game_url, timeout=3000)
         
         # Check if we were redirected to login page (session lost)
         time.sleep(1) 
@@ -147,7 +148,7 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, sr: Scrip
             print("Redirection detected. Attempting to log in again...")
             sr.stage("RELOGIN")
             login(page)
-            page.goto(game_url, timeout=30000)
+            page.goto(game_url, timeout=3000)
 
         # Access the game iframe
         sr.stage("IFRAME_LOAD")
@@ -163,7 +164,7 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, sr: Scrip
         # Wait for iframe content
         try:
              # Wait for a core element inside the frame
-             frame.locator("#num2, #btnSelectNum").first.wait_for(state="attached", timeout=30000)
+             frame.locator("#num2, #btnSelectNum").first.wait_for(state="attached", timeout=5000)
              # Wait for the game interface
              frame.locator("#num2").wait_for(state="visible", timeout=15000)
              print("Game interface loaded (#num2 visible)")
@@ -172,7 +173,7 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, sr: Scrip
              print(f"Timeout waiting for iframe content ({e}). Retrying navigation...")
              page.reload(wait_until="networkidle")
              page.wait_for_selector("#ifrm_tab", state="visible", timeout=20000)
-             frame.locator("#num2, #btnSelectNum").first.wait_for(state="attached", timeout=30000)
+             frame.locator("#num2, #btnSelectNum").first.wait_for(state="attached", timeout=5000)
 
         print('Navigated to Lotto 6/45 Game Frame')
 
@@ -185,7 +186,7 @@ def run(playwright: Playwright, auto_games: int, manual_numbers: list, sr: Scrip
                 if not frame.get_by_text("로그아웃").first.is_visible(timeout=5000):
                     sr.stage("RELOGIN_FRAME")
                     login(page)
-                    page.goto(game_url, timeout=30000)
+                    page.goto(game_url, timeout=5000)
             else:
                 print(f"Login ID on Game Page: {user_id_val}")
         except Exception:
