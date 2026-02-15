@@ -19,7 +19,7 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             # Navigate to the repository directory
-            TARGET_DIR="GitHub/lotto"
+            TARGET_DIR="lotto"
             
             if [ -d "$TARGET_DIR" ]; then
               cd "$TARGET_DIR" || exit 1
