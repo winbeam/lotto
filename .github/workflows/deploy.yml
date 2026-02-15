@@ -18,8 +18,14 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
+            # Check if git is installed
+            if ! command -v git &> /dev/null; then
+              echo "⚠️  Git is not installed. Installing git..."
+              sudo apt-get update && sudo apt-get install -y git
+            fi
+            
             # Navigate to the repository directory
-            TARGET_DIR="lotto"
+            TARGET_DIR="GitHub/lotto"
             
             if [ -d "$TARGET_DIR" ]; then
               cd "$TARGET_DIR" || exit 1
