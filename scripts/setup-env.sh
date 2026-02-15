@@ -57,12 +57,22 @@ echo "🌐 Installing Playwright browsers..."
 
 # Install system dependencies on Linux (requires sudo)
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    echo "🐧 Detection Linux: Installing system dependencies for headless browser..."
-    echo "🔑 Sudo password may be required."
-    sudo "$VENV_DIR/bin/playwright" install-deps chromium
+    echo "🐧 Detected Linux: Installing system dependencies for headless browser..."
+    if command -v sudo &> /dev/null; then
+        echo "🔑 Using sudo to install dependencies..."
+        sudo "$VENV_DIR/bin/playwright" install-deps chromium
+    elif [ "$EUID" -eq 0 ]; then
+        echo "🔑 Running as root, installing dependencies..."
+        "$VENV_DIR/bin/playwright" install-deps chromium
+    else
+        echo "⚠️  Warning: sudo not available and not running as root."
+        echo "   Playwright system dependencies may not be installed."
+        echo "   Manual installation may be required:"
+        echo "   - Run: playwright install-deps chromium"
+    fi
 fi
 
- echo "✅ Playwright Chromium browser installed"
+echo "✅ Playwright Chromium browser installed"
 echo ""
 
 # Step 6: Check .env file
@@ -70,14 +80,14 @@ if [ ! -f "$PROJECT_DIR/.env" ]; then
     echo "⚠️  Warning: .env file not found"
     echo "📝 Creating .env from .env.example..."
     cp "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
-    echo "✅ .env file created"
+echo "✅ .env file created"
 echo ""
-    echo "🔧 Please edit .env and configure:"
-    echo "   - USER_ID: Your dhlottery.co.kr ID"
-    echo "   - PASSWD: Your password"
-    echo "   - CHARGE_PIN: Your 6-digit charge PIN"
-    echo "   - AUTO_GAMES: Number of auto games (optional)"
-    echo "   - MANUAL_NUMBERS: Manual numbers in JSON format (optional)"
+echo "🔧 Please edit .env and configure:"
+echo "   - USER_ID: Your dhlottery.co.kr ID"
+echo "   - PASSWD: Your password"
+echo "   - CHARGE_PIN: Your 6-digit charge PIN"
+echo "   - AUTO_GAMES: Number of auto games (optional)"
+echo "   - MANUAL_NUMBERS: Manual numbers in JSON format (optional)"
 echo ""
 else
     echo "✅ .env file exists"
