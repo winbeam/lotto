@@ -57,6 +57,23 @@ def save_session(context, path=SESSION_PATH):
     context.storage_state(path=path)
     print(f"Session saved to {path}")
 
+def dismiss_popups(page: Page):
+    """Dismiss common mobile popups that might block clicks."""
+    try:
+        # Check for common close buttons in popups
+        # .btn_close, .close, .popup_close, etc.
+        popups = page.locator(".popupLayer, #common_popup_wrap, .main_popup").locator("visible=true")
+        if popups.count() > 0:
+            print(f"Found {popups.count()} potential popups. Attempting to dismiss...")
+            close_buttons = page.locator(".btn_close, .close, button:has-text('닫기'), a:has-text('오늘 하루 보지 않기')").locator("visible=true")
+            for i in range(close_buttons.count()):
+                try:
+                    close_buttons.nth(i).click(timeout=2000)
+                except:
+                    pass
+    except Exception as e:
+        print(f"Popup dismissal warning: {e}")
+
 
 
 def check_logged_in_elements(page: Page, timeout: int = 2000) -> bool:
@@ -131,34 +148,46 @@ def login(page: Page) -> None:
     
     # 2. Go to home page first to establish session
     print("Navigating to mobile home page...")
+    target_url = "https://m.dhlottery.co.kr/"
     try:
-        page.goto("https://m.dhlottery.co.kr/", timeout=30000, wait_until="networkidle")
+        page.goto(target_url, timeout=30000, wait_until="networkidle")
+        print(f"Current URL: {page.url}")
+        
+        # New: Dismiss any popups that might block the login button
+        dismiss_popups(page)
         
         # Click login button on home page
-        print("Clicking login button on home page...")
+        print("Looking for login button on home page...")
         login_btn = page.locator("#loginBtn").first
-        if not login_btn.is_visible(timeout=2000):
-            login_btn = page.get_by_role("link", name=re.compile("로그인")).first
+        if not login_btn.is_visible(timeout=3000):
+             # Try other common selectors for mobile login link
+             login_btn = page.get_by_role("link", name=re.compile("로그인")).first
             
         if login_btn.is_visible(timeout=5000):
-            login_btn.click()
+            print(f"Clicking login button (found via selector)...")
+            # Use force=True if it might be obscured, or just click
+            login_btn.click(timeout=10000)
         else:
-            # Fallback directly to login page
+            print("Login button not visible on home page. Navigating to login URL directly...")
             page.goto("https://m.dhlottery.co.kr/user.do?method=login", timeout=20000, wait_until="load")
             
+        print(f"Current URL (after login navigation): {page.url}")
         # Now wait for the form to be ready
-        print("Waiting for login form to appear...")
+        print("Waiting for login form fields to appear...")
         # Subagent confirmed #inpUserId and #inpUserPswdEncn
         page.wait_for_selector("#inpUserId", timeout=20000)
     except Exception as e:
         print(f"Navigation or selector wait failed: {e}")
-        # Take a screenshot
-        screenshot_path = f"login_nav_failed_{int(time.time())}.png"
-        try:
-            page.screenshot(path=screenshot_path)
-        except:
-            pass
-        raise e
+        # If we failed to click but we can still try direct navigation as a last resort
+        if "m.dhlottery.co.kr" in page.url and "/login" not in page.url:
+            print("Attempting emergency direct navigation to login page...")
+            try:
+                page.goto("https://m.dhlottery.co.kr/user.do?method=login", timeout=20000, wait_until="load")
+                page.wait_for_selector("#inpUserId", timeout=10000)
+            except:
+                raise e
+        else:
+            raise e
     
     # 3. Fill login form
     try:
@@ -168,14 +197,18 @@ def login(page: Page) -> None:
         id_selector = "#userId" if page.locator("#userId").is_visible() else "#inpUserId"
         pw_selector = "#userPwd" if page.locator("#userPwd").is_visible() else "#inpUserPswdEncn"
         
+        print(f"Entering User ID: {USER_ID[:3]}***")
         page.locator(id_selector).fill(USER_ID)
+        
+        print("Entering Password: ***")
         page.locator(pw_selector).fill(PASSWD)
         
         # Click login button - mobile often uses .btn_login
-        print("Clicking login button...")
         if page.locator(".btn_login").is_visible():
+            print("Clicking mobile login button (.btn_login)...")
             page.click(".btn_login")
         else:
+            print("Clicking standard login button (#btnLogin)...")
             page.click("#btnLogin")
     except Exception as e:
         # Debugging: Capture state on failure
@@ -225,17 +258,24 @@ def login(page: Page) -> None:
     # NEW: Sync session with the game subdomain (el.dhlottery.co.kr)
     # Using mobile URLs for synchronization
     try:
-        print("Synchronizing session with game subdomain...")
-        page.goto("https://el.dhlottery.co.kr/common_mobile/do_sso.jsp", timeout=15000, wait_until="commit")
-        print("Subdomain session synced.")
+        print("Synchronizing session with game subdomain (el.dhlottery.co.kr)...")
+        sync_url = "https://el.dhlottery.co.kr/common_mobile/do_sso.jsp"
+        print(f"Navigating to sync URL: {sync_url}")
+        page.goto(sync_url, timeout=15000, wait_until="commit")
+        print(f"Current URL: {page.url}")
+        print("Subdomain session synchronization complete.")
     except Exception as e:
         print(f"Subdomain sync warning: {e}")
     
     # Return to mobile main page
     try:
-        page.goto("https://m.dhlottery.co.kr/common.do?method=main", timeout=15000, wait_until="commit")
-    except:
-        pass
+        print("Returning to mobile home page...")
+        home_url = "https://m.dhlottery.co.kr/common.do?method=main"
+        page.goto(home_url, timeout=15000, wait_until="commit")
+        print(f"Current URL: {page.url}")
+        print("Navigation to home page successful.")
+    except Exception as e:
+        print(f"Home page return warning: {e}")
 
 
 def main():

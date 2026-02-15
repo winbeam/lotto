@@ -19,12 +19,14 @@ def get_balance(page: Page) -> dict:
     """
     print("Navigating to My Page...")
     page.goto("https://m.dhlottery.co.kr/mypage.do?method=home", timeout=30000, wait_until="commit")
+    print(f"Current URL: {page.url}")
     
     # Check if redirected to login
     if "/login" in page.url or "method=login" in page.url:
         print("Redirection to login page detected. Attempting to log in again...")
         login(page)
         page.goto("https://m.dhlottery.co.kr/mypage.do?method=home", timeout=30000, wait_until="commit")
+        print(f"Current URL: {page.url}")
     
     print("Waiting for balance elements...")
     # Try multiple possible selectors for the balance
@@ -47,8 +49,10 @@ def get_balance(page: Page) -> dict:
         el = page.locator(selector).first
         if el.is_visible():
             deposit_text = el.inner_text().strip()
-            print(f"Found deposit balance via {selector}")
+            print(f" -> Found deposit balance: '{deposit_text}' (via {selector})")
             break
+    else:
+        print(" -> Warning: No deposit balance selector matched.")
     
     # 2. Get available amount (구매가능)
     # On mobile, it's often in a different container or the same header
@@ -58,8 +62,10 @@ def get_balance(page: Page) -> dict:
         el = page.locator(selector).first
         if el.is_visible():
             available_text = el.inner_text().strip()
-            print(f"Found available amount via {selector}")
+            print(f" -> Found available amount: '{available_text}' (via {selector})")
             break
+    else:
+        print(" -> Warning: No available amount selector matched.")
     
     # Parse amounts (remove non-digits)
     deposit_balance = int(re.sub(r'[^0-9]', '', deposit_text) or "0")

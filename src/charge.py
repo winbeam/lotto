@@ -147,8 +147,10 @@ def parse_keypad(page: Page) -> dict:
                     break
 
         if text and text not in number_map:
+            print(f" -> Keypad detection: {text} found at button index {idx}")
             number_map[text] = btn_info['element']
 
+    print(f"Keypad mapping complete. Found {len(number_map)} unique digits: {sorted(number_map.keys())}")
     return number_map
 
 def charge_deposit(page: Page, amount: int) -> bool:
@@ -168,14 +170,17 @@ def charge_deposit(page: Page, amount: int) -> bool:
 
     print(f"Navigating to charge page for {amount:,} won...")
     # Use wait_until="networkidle" to ensure tabs and scripts are loaded
+    print(f"Navigating to charge page for {amount:,} won...")
     # Mobile charge URL
     page.goto("https://m.dhlottery.co.kr/mypage.do?method=mndpChrg", timeout=30000, wait_until="networkidle")
+    print(f"Current URL: {page.url}")
     
     # Check if we were redirected to login
     if "/login" in page.url or "method=login" in page.url:
         print(f"Redirection detected (URL: {page.url}). Attempting to log in again...")
         login(page)
         page.goto("https://m.dhlottery.co.kr/mypage.do?method=mndpChrg", timeout=30000, wait_until="networkidle")
+        print(f"Current URL: {page.url}")
 
     # 간편충전 선택 (Easy Charge tab)
     # The tab is usually an <li> with id="tab1" or a button containing the text
@@ -228,13 +233,17 @@ def charge_deposit(page: Page, amount: int) -> bool:
         print(f"Error: Keypad recognition failed (only {len(number_map)} digits).")
         return False
         
-    for digit in CHARGE_PIN:
+    print(f"Entering PIN: {len(CHARGE_PIN)} digits")
+    for idx, digit in enumerate(CHARGE_PIN):
         if digit in number_map:
+            print(f" -> Clicking digit {digit} (position {idx+1}/{len(CHARGE_PIN)})")
             number_map[digit].click()
             time.sleep(0.3)
         else:
+            print(f" -> Error: Digit {digit} not found in the recognized keypad!")
             return False
             
+    print("All digits entered. Waiting for transaction to complete...")
     page.wait_for_load_state("networkidle")
     return True
 

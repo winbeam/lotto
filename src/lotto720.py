@@ -64,12 +64,14 @@ def run(playwright: Playwright, sr: ScriptReporter) -> None:
         # Navigate to the Game Page directly
         print(f"Navigating to Lotto 720 mobile game page: {GAME_URL}")
         page.goto(GAME_URL, timeout=30000, wait_until="commit", referer="https://m.dhlottery.co.kr/")
+        print(f"Current URL: {page.url}")
         
         # Check if we were redirected to login page (session lost)
         if "/login" in page.url or "method=login" in page.url:
             print(f"Redirection detected (URL: {page.url}). Attempting to log in again...")
             login(page)
             page.goto(GAME_URL, timeout=30000, wait_until="commit")
+            print(f"Current URL: {page.url}")
 
         # Give it a moment to load components
         time.sleep(2)
@@ -130,26 +132,31 @@ def run(playwright: Playwright, sr: ScriptReporter) -> None:
         """)
 
         # [자동번호] 클릭
-        sr.stage("PURCHASE")
+        sr.stage("PURCHASE_SELECTION")
+        print("Clicking 'Automatic Number' (자동번호)...")
         auto_btn.click(force=True)
         
         time.sleep(1)
         
         # [선택완료] 클릭
+        print("Clicking 'Confirm Selection' (선택완료)...")
         confirm_btn = page.locator(".lotto720_btn_confirm_number, .btn_confirm, #btnConfirm").first
         confirm_btn.click()
         
         time.sleep(1)
  
         # [구매하기] 클릭
+        print("Clicking 'Purchase' (구매하기)...")
         buy_btn = page.locator("a:has-text('구매하기'), .btn_buy, #btnBuy").first
         buy_btn.click()
         
         # Handle Confirmation Popup
+        print("Waiting for final confirmation popup...")
         confirm_popup = page.locator("#lotto720_popup_confirm, #popupLayerConfirm").first
         confirm_popup.wait_for(state="visible", timeout=5000)
         
         # Click Final Purchase Button
+        print("Confirming final purchase...")
         confirm_popup.locator("a.btn_blue, .btn_confirm_ok, input[value='확인']").first.click()
         
         time.sleep(2)
