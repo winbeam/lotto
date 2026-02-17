@@ -9,7 +9,7 @@ WorkingDirectory={{PROJECT_ROOT}}
 Environment="PATH={{PROJECT_ROOT}}/.venv/bin:/usr/local/bin:/usr/bin:/bin"
 
 # Run main workflow script
-ExecStart={{PROJECT_ROOT}}/scripts/purchase.sh
+ExecStart={{PROJECT_ROOT}}/scripts/run.sh
 
 # Logging
 StandardOutput=journal

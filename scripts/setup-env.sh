@@ -7,21 +7,20 @@ SCRIPT_DIR="$(cd "$(dirname ""${BASH_SOURCE[0]}"")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENV_DIR="$PROJECT_DIR/.venv"
 
-echo "🎰 Lotto Auto Purchase - Environment Setup"
-echo "============================================"
-echo ""
-echo "📂 Project directory: $PROJECT_DIR"
+echo "Lotto - Environment Setup"
+echo "========================================"
+echo "Project directory: $PROJECT_DIR"
 echo ""
 
-# Step 1: Check Python
-echo "🐍 Checking Python installation..."
+# Check Python
+echo "Checking Python installation..."
 if ! command -v python3 &> /dev/null; then
-    echo "❌ Error: Python 3 is not installed"
+    echo "Error: Python 3 is not installed"
     echo "Please install Python 3.9 or higher"
     exit 1
 fi
 PYTHON_VERSION=$(python3 --version)
-echo "✅ Found: $PYTHON_VERSION"
+echo "Found: $PYTHON_VERSION"
 echo ""
 
 # Step 2: Create virtual environment
@@ -38,47 +37,50 @@ else
 fi
 echo ""
 
-# Step 3: Upgrade pip
-echo "⬆️  Upgrading pip..."
+# Upgrade pip
+echo "Upgrading pip..."
 "$VENV_DIR/bin/pip" install --upgrade pip --quiet
-echo "✅ pip upgraded"
+echo "pip upgraded"
 echo ""
 
-# Step 4: Install dependencies
-echo "📥 Installing Python dependencies..."
+# Install dependencies
+echo "Installing Python dependencies..."
 "$VENV_DIR/bin/pip" install -r "$PROJECT_DIR/requirements.txt"
-echo "✅ Dependencies installed:"
-"$VENV_DIR/bin/pip" list | grep -E "playwright|pytest-playwright|pytesseract|Pillow|python-dotenv"
+echo "Dependencies installed"
 echo ""
 
-# Step 5: Install Playwright browsers
-echo "🌐 Installing Playwright browsers..."
+# Install Playwright browsers
+echo "Installing Playwright browsers..."
 "$VENV_DIR/bin/playwright" install chromium
 
 # Install system dependencies on Linux (requires sudo)
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    echo "🐧 Detected Linux: Installing system dependencies for headless browser..."
-    if command -v sudo &> /dev/null; then
-        echo "🔑 Using sudo to install dependencies..."
-        sudo "$VENV_DIR/bin/playwright" install-deps chromium
-    elif [ "$EUID" -eq 0 ]; then
-        echo "🔑 Running as root, installing dependencies..."
-        "$VENV_DIR/bin/playwright" install-deps chromium
+    if command -v pacman &> /dev/null; then
+        echo "Arch Linux (or derivative) detected. Installing minimal headless dependencies..."
+        echo "Sudo password may be required."
+        # User requested minimal list (Apt -> Arch mapping)
+        sudo pacman -S --needed --noconfirm \
+            nss nspr at-spi2-core libxkbcommon libxcomposite \
+            libxdamage libxrandr mesa alsa-lib pango cairo gdk-pixbuf2 \
+            tesseract
     else
-        echo "⚠️  Warning: sudo not available and not running as root."
-        echo "   Playwright system dependencies may not be installed."
-        echo "   Manual installation may be required:"
-        echo "   - Run: playwright install-deps chromium"
+        echo "Linux detected: Installing system dependencies for headless browser..."
+        echo "Sudo password may be required."
+        sudo "$VENV_DIR/bin/playwright" install-deps chromium || echo "Warning: playwright install-deps failed. Continuing anyway..."
+        
+        if command -v apt-get &> /dev/null; then
+            echo "Installing tesseract-ocr for Ubuntu/Debian..."
+            sudo apt-get update && sudo apt-get install -y tesseract-ocr
+        fi
     fi
 fi
 
-echo "✅ Playwright Chromium browser installed"
+echo "Playwright Chromium browser installed"
 echo ""
 
-# Step 6: Check .env file
+# Check .env file
 if [ ! -f "$PROJECT_DIR/.env" ]; then
-    echo "⚠️  Warning: .env file not found"
-    echo "📝 Creating .env from .env.example..."
+    echo "Creating .env from .env.example..."
     cp "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
 echo "✅ .env file created"
 echo ""
@@ -90,11 +92,11 @@ echo "   - AUTO_GAMES: Number of auto games (optional)"
 echo "   - MANUAL_NUMBERS: Manual numbers in JSON format (optional)"
 echo ""
 else
-    echo "✅ .env file exists"
+    echo ".env file exists"
 fi
 echo ""
 
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Environment setup completed!"
 echo ""
 echo "✅ Environment setup completed!"
 echo ""

@@ -6,13 +6,13 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname ""${BASH_SOURCE[0]}"")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "🚀 Starting Deployment Process..."
+echo "Lotto - Deployment"
 echo "========================================"
-date "+%Y-%m-%d %H:%M:%S"
+echo "Project directory: $PROJECT_DIR"
 echo ""
 
-# 1. Update Environment (Dependencies & Playwright)
-echo "📦 Step 1: Updating environment..."
+# Update Environment (Dependencies & Playwright)
+echo "Updating environment..."
 "$SCRIPT_DIR/setup-env.sh"
 echo ""
 
@@ -28,5 +28,5 @@ echo "   cd $PROJECT_DIR && ./scripts/install-systemd.sh"
 fi
 
 echo ""
-echo "✅ Deployment completed successfully!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Deployment completed successfully!"
+

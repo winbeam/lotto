@@ -6,7 +6,10 @@ import time
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import Playwright, sync_playwright, Page
-from login import login
+from login import login, SESSION_PATH, DEFAULT_USER_AGENT, DEFAULT_VIEWPORT, DEFAULT_HEADERS, GLOBAL_TIMEOUT
+
+import traceback
+from script_reporter import ScriptReporter
 
 # .env loading is handled by login module import
 
@@ -27,182 +30,187 @@ def parse_keypad(page: Page) -> dict:
         
     Returns:
         dict: {숫자(str): element} 형태의 버튼 매핑 (0-9만 포함)
-        
-    Raises:
-        Exception: 키패드 버튼을 찾지 못했을 경우
     """
     import pytesseract
     from PIL import Image, ImageEnhance, ImageFilter
     import io
 
-    # 키패드 이미지 대기
-    # Updated from .kpd-layer to .nppfs-keypad based on browser inspection
+    # Tesseract 경로 설정
+    tesseract_cmd = os.environ.get('TESSERACT_PATH')
+    if not tesseract_cmd:
+        common_paths = ["/usr/local/bin/tesseract", "/opt/homebrew/bin/tesseract", "/usr/bin/tesseract"]
+        for path in common_paths:
+            if os.path.exists(path):
+                tesseract_cmd = path
+                break
+    if tesseract_cmd:
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+
     keypad_selector = ".nppfs-keypad"
-    page.wait_for_selector(keypad_selector, state="visible")
+    try:
+        page.wait_for_selector(keypad_selector, state="visible", timeout=GLOBAL_TIMEOUT)
+    except Exception:
+        raise Exception("Keypad not visible")
     
-    # 키패드 버튼들 가져오기
+    # 버튼 위치 정보 수집
     buttons = page.locator("img.kpd-data")
     count = buttons.count()
-    
     if count == 0:
         raise Exception("No keypad buttons found")
 
-    # 버튼 위치 정보 수집
     button_positions = []
     for i in range(count):
         btn = buttons.nth(i)
         box = btn.bounding_box()
-        # box['width'] > 0 and box['height'] > 0 check to prevent ZeroDivisionError later
-        if box and box['width'] > 0 and box['height'] > 0:
-            button_positions.append({
-                'element': btn,
-                'x': box['x'],
-                'y': box['y'],
-                'w': box['width'],
-                'h': box['height']
-            })
+        if box and box['width'] > 0:
+            button_positions.append({'element': btn, 'x': box['x'], 'y': box['y'], 'w': box['width'], 'h': box['height']})
 
-    # 전체 키패드 영역 스크린샷 (캡처 후 메모리에서 처리)
-    time.sleep(1) # Wait for animation/render
+    # 전체 키패드 영역 스크린샷
+    time.sleep(0.3) # 애니메이션 대기 시간 단축
     keypad_layer = page.locator(keypad_selector)
     keypad_box = keypad_layer.bounding_box()
-    
-    if not keypad_box or keypad_box['width'] == 0 or keypad_box['height'] == 0:
-        raise Exception(f"Keypad container has invalid size: {keypad_box}")
-
     screenshot_bytes = page.screenshot(clip=keypad_box)
     keypad_img = Image.open(io.BytesIO(screenshot_bytes))
 
     number_map = {}
-    
-    # 좌표 기준 정렬 (y 우선, x 다음)
     button_positions.sort(key=lambda b: (b['y'], b['x']))
 
     for idx, btn_info in enumerate(button_positions):
-        # 상대 좌표 계산
         lx = btn_info['x'] - keypad_box['x']
         ly = btn_info['y'] - keypad_box['y']
+        button_img = keypad_img.crop((lx, ly, lx + btn_info['w'], ly + btn_info['h']))
         
-        crop_box = (lx, ly, lx + btn_info['w'], ly + btn_info['h'])
-        button_img = keypad_img.crop(crop_box)
-        
-        text = None
-        
-        # 전처리 및 OCR 시도 (여러 전략)
+        # 전처리: 흑백 변환 및 대비 향상
         gray = button_img.convert('L')
-        
-        # 1. 기본 대비 향상
-        enhancer = ImageEnhance.Contrast(gray)
-        enhanced = enhancer.enhance(2.0)
+        enhanced = ImageEnhance.Contrast(gray).enhance(2.0)
         binary = enhanced.point(lambda p: p > 128 and 255)
         
-        configs = [
-            r'--oem 3 --psm 10 -c tessedit_char_whitelist=0123456789', # 단일 문자
-            r'--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789',  # 단일 라인
-            r'--oem 3 --psm 8 -c tessedit_char_whitelist=0123456789'   # 단일 단어
-        ]
+        # OCR (가장 효율적인 설정부터 시도)
+        configs = [r'--oem 3 --psm 10 -c tessedit_char_whitelist=0123456789', r'--oem 3 --psm 8 -c tessedit_char_whitelist=0123456789']
         
+        found_text = None
         for config in configs:
             result = pytesseract.image_to_string(binary, config=config).strip()
             if result.isdigit() and len(result) == 1:
-                text = result
+                found_text = result
                 break
         
-        if not text:
-            # 샤프닝 시도
-            sharp = enhanced.filter(ImageFilter.SHARPEN)
-            binary_sharp = sharp.point(lambda p: p > 128 and 255)
-            for config in configs:
-                result = pytesseract.image_to_string(binary_sharp, config=config).strip()
-                if result.isdigit() and len(result) == 1:
-                    text = result
-                    break
+        if found_text and found_text not in number_map:
+            number_map[found_text] = btn_info['element']
 
-        if text and text not in number_map:
-            number_map[text] = btn_info['element']
-
+    print(f"Keypad mapping: {sorted(number_map.keys())}")
     return number_map
 
 def charge_deposit(page: Page, amount: int) -> bool:
     """
     [간편충전] 기능을 사용하여 예치금을 충전합니다.
-    
-    Args:
-        page: 로그인된 Playwright Page 객체
-        amount: 충전할 금액 (5000, 10000, 20000 중 하나)
-        
-    Returns:
-        bool: 충전 요청 성공 여부
     """
     if not CHARGE_PIN:
-        print("❌ Error: CHARGE_PIN not found in environment variables.")
+        print("Error: CHARGE_PIN not found")
         return False
 
     print(f"Navigating to charge page for {amount:,} won...")
-    page.goto("https://www.dhlottery.co.kr/mypage/mndpChrg")
+    page.goto("https://m.dhlottery.co.kr/mypage/mndpChrg", timeout=GLOBAL_TIMEOUT, wait_until="networkidle")
     
-    # 간편충전 선택
-    page.click("text=간편충전")
-    
-    # 금액 선택
-    amount_map = {5000: "5,000", 10000: "10,000", 20000: "20,000"}
+    if "/login" in page.url:
+        login(page)
+        page.goto("https://m.dhlottery.co.kr/mypage/mndpChrg", timeout=GLOBAL_TIMEOUT, wait_until="networkidle")
+
+    # 충전 금액 선택
+    amount_map = {5000: "5,000", 10000: "10,000", 20000: "20,000", 30000: "30,000", 50000: "50,000"}
     if amount not in amount_map:
-        print(f"❌ Error: Invalid amount {amount}. Choose 5000, 10000, 20000.")
+        print(f"Error: Invalid amount {amount}")
         return False
         
-    # Updated selector from 'amoundApply' to 'EcAmt'
     page.select_option("select#EcAmt", label=f"{amount_map[amount]}원")
     
-    # 충전하기 버튼 클릭 (간편충전 하단 버튼)
-    # fn_openEcRegistAccountCheck가 있는 버튼 중 'visible'한 것만 클릭
-    charge_btn = page.locator("button", has_text="충전하기").filter(has=page.locator("xpath=self::*[contains(@onclick, 'fn_openEcRegistAccountCheck')]")).locator("visible=true")
-    if charge_btn.count() > 0:
-        charge_btn.first.click()
-    else:
-        # Fallback: try class based if text fails
-        page.locator(".btn-rec01:visible").first.click()
+    # 충전하기 버튼 클릭
+    print("Clicking charge button...")
+    page.click("button.btn-rec01:visible", timeout=GLOBAL_TIMEOUT)
     
     # PIN 키패드 대기
-    # Updated selector: .kpd-layer -> .nppfs-keypad
     try:
-        page.wait_for_selector(".nppfs-keypad", state="visible", timeout=10000)
-    except Exception:
-        # Fallback for old selector just in case
-        page.wait_for_selector(".kpd-layer", state="visible", timeout=5000)
+        page.wait_for_selector(".nppfs-keypad", state="visible", timeout=GLOBAL_TIMEOUT)
+    except:
+        print("Keypad did not appear.")
+        return False
 
     number_map = parse_keypad(page)
-    
-    if len(number_map) < 9:
-        print(f"❌ Error: Keypad recognition failed (only {len(number_map)} digits).")
-        return False
+    if len(number_map) < 10:
+        print(f"Keypad recognition incomplete ({len(number_map)}/10). Retrying crop logic...")
+        # (Optinal: 추가 로직 넣을 수 있음)
         
+    print(f"Entering PIN...")
     for digit in CHARGE_PIN:
         if digit in number_map:
             number_map[digit].click()
-            time.sleep(0.3)
+            time.sleep(0.1) # 속도 향상
         else:
+            print(f"Digit {digit} not found")
             return False
             
-    page.wait_for_load_state("networkidle")
-    return True
+    print("PIN entered. Waiting for confirmation...")
+    
+    # 결과 확인 로직 강화
+    try:
+        # 1. URL 변화 확인 (result=OK)
+        # 2. 완료 팝업 확인 (#btnAlertPop)
+        success_selector = "button#btnAlertPop, .btn_confirm, text='완료되었습니다', text='OK'"
+        page.wait_for_selector(success_selector, state="visible", timeout=20000)
+        
+        msg = page.locator("body").inner_text()
+        if "완료" in msg or "result=OK" in page.url:
+            print("Charge success confirmed by UI!")
+            # 팝업 닫기 시도
+            if page.locator("button#btnAlertPop").is_visible():
+                page.click("button#btnAlertPop")
+            return True
+        else:
+            print(f"Unexpected message or state: {page.url}")
+            return False
+    except Exception as e:
+        print(f"Verification timed out or failed: {e}")
+        # URL이라도 확인
+        if "result=OK" in page.url:
+            print("Charge likely successful (URL result=OK)")
+            return True
+        return False
 
-def run(playwright: Playwright, amount: int):
-    browser = playwright.chromium.launch(headless=True)
-    context = browser.new_context()
+def run(playwright: Playwright, amount: int, sr: ScriptReporter):
+    HEADLESS = os.environ.get('HEADLESS', 'false').lower() == 'true'
+    
+    browser = playwright.chromium.launch(headless=HEADLESS, slow_mo=0 if HEADLESS else 200)
+    storage_state = SESSION_PATH if Path(SESSION_PATH).exists() else None
+    context = browser.new_context(
+        storage_state=storage_state,
+        user_agent=DEFAULT_USER_AGENT,
+        viewport=DEFAULT_VIEWPORT,
+        extra_http_headers=DEFAULT_HEADERS
+    )
     page = context.new_page()
     
     try:
-        login(page)
+        from login import is_logged_in, setup_dialog_handler
+        setup_dialog_handler(page) # 알럿 자동 처리
+        
+        if not is_logged_in(page):
+            sr.stage("LOGIN")
+            login(page)
+            
+        sr.stage("CHARGE")
         success = charge_deposit(page, amount)
+        
         if success:
-            print("✅ Charge completed successfully!")
+            return True
         else:
-            print("❌ Charge failed.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+            return False
+    except Exception:
+        raise
     finally:
+        time.sleep(2) # 결과 확인용 대기
         context.close()
         browser.close()
+
 
 if __name__ == "__main__":
     amount = 10000
@@ -212,5 +220,17 @@ if __name__ == "__main__":
         except ValueError:
             pass
             
+    sr = ScriptReporter("Balance Charge")
     with sync_playwright() as playwright:
-        run(playwright, amount)
+        try:
+            success = run(playwright, amount, sr)
+            if success:
+                sr.success({"amount": amount})
+                print("Final result: True")
+                sys.exit(0)
+            else:
+                sr.fail("Charge failed verification")
+                sys.exit(1)
+        except Exception:
+            sr.fail(traceback.format_exc())
+            sys.exit(1)

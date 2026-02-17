@@ -45,7 +45,7 @@ lotto/
 │   ├── lotto645.py              # 로또 6/45 구매
 │   └── lotto720.py              # 연금복권 720 구매
 ├── scripts/                      # 실행 스크립트
-│   ├── purchase.sh              # 메인 워크플로우 스크립트
+│   ├── run.sh                  # 메인 워크플로우 스크립트
 │   ├── setup-env.sh             # 환경 설정 (venv, pip)
 │   ├── install-systemd.sh       # Systemd 타이머 설치
 │   └── systemd/                 # Systemd 설정 파일
@@ -102,7 +102,13 @@ source .venv/bin/activate
 -   **잔액 확인**: `./src/balance.py`
 -   **전체 워크플로우 실행**:
 ```bash
-./scripts/purchase.sh
+./scripts/run.sh
+```
+
+-   **특정 복권만 구매하는 옵션**:
+```bash
+./scripts/run.sh --645   # 로또 6/45만 구매 (연금복권 스킵)
+./scripts/run.sh --720   # 연금복권 720만 구매 (로또 스킵)
 ```
 
 ### 4. 자동화 설정 (Systemd 타이머)
@@ -222,7 +228,7 @@ MANUAL_NUMBERS=[]
 - Playwright 브라우저 설치
 - .env 파일 생성
 
-#### `purchase.sh`
+#### `run.sh`
 메인 워크플로우 스크립트:
 1. 잔액 확인
 2. 조건부 충전 (10,000원 미만 시)
